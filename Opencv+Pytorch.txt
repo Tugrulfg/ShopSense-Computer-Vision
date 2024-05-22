@@ -1,6 +1,6 @@
 clear
-rm -f Track
+rm -f Test
 cmake -B build
 cmake .
 make
-./Track
+./Test
