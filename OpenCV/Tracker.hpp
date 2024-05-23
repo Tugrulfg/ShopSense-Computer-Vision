@@ -1,7 +1,6 @@
 #ifndef TRACKER_HPP
 #define TRACKER_HPP
 
-#include <torch/torch.h>
 #include <opencv2/opencv.hpp>
 #include <cstdlib>
 #include <iostream>

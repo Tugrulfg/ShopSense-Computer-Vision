@@ -116,7 +116,7 @@ torch::Tensor getBoxes(const torch::Tensor& label_matrix){
     bboxes =(bestbox * label_matrix.slice(/*dim=*/-1, /*start=*/16, /*end=*/20) + (1 - bestbox) * label_matrix.slice(/*dim=*/-1, /*start=*/11, /*end=*/15));
 
     torch::Tensor cell_indices = torch::arange((int)GRID_SIZE).repeat({1, (int)GRID_SIZE, 1}).unsqueeze(-1);
-    torch::Tensor w = img_size * bboxes.slice(-1, 2, 3).clamp(0);
+    torch::Tensor w = img_size * bboxes.slice(-1, 2, 3).clamp(0);q
     torch::Tensor h = img_size * bboxes.slice(-1, 3, 4).clamp(0);
     torch::Tensor x = (img_size / grid_size) * ((bboxes.slice(-1, 0, 1).clamp(0) + cell_indices));
     torch::Tensor y = (img_size / grid_size) * ((bboxes.slice(-1, 1, 2).clamp(0) + cell_indices.permute({0, 2, 1, 3})));

@@ -13,7 +13,7 @@ find_package(OpenMP REQUIRED)
 # Include necessary header directories
 include_directories(${OpenCV_INCLUDE_DIRS} )
 
-set(SOURCES track.cpp)  
+set(SOURCES track.cpp Tracker.cpp)  
 
 # Create the executable
 add_executable(Track ${SOURCES})
