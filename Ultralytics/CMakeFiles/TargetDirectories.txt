@@ -1,0 +1,3 @@
+/home/tugrul/Desktop/ShowSense/Github/Ultralytics/CMakeFiles/Track.dir
+/home/tugrul/Desktop/ShowSense/Github/Ultralytics/CMakeFiles/edit_cache.dir
+/home/tugrul/Desktop/ShowSense/Github/Ultralytics/CMakeFiles/rebuild_cache.dir
