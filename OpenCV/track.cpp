@@ -32,7 +32,6 @@ std::vector<std::string> getFiles(const std::string& path);
 
 int main(){
     std::cout << "OpenCV version: " << CV_VERSION << std::endl;
-    std::cout << "OpenCV version (using getVersionString): " << cv::getVersionString() << std::endl;
     Tracker tracker;
     cv::dnn::Net net = cv::dnn::readNet("../Models/yolov8sop10.onnx");
     std::vector<std::pair<cv::Rect2f, int>> detections;
@@ -52,8 +51,19 @@ int main(){
         cv::resize(frame, frame, cv::Size(IMAGE_SIZE, IMAGE_SIZE));
         input = cv::dnn::blobFromImage(frame, 1.0 / 255.0, cv::Size(IMAGE_SIZE, IMAGE_SIZE), cv::Scalar(0, 0, 0), true, false);
         net.setInput(input);
-        output = net.forward();
-        std::cout << output.size << std::endl;
+        std::vector<std::string> outputNames = net.getUnconnectedOutLayersNames();
+
+        // Create a vector to store the outputs
+        std::vector<cv::Mat> outputs;
+
+        // Run the forward pass and retrieve the outputs
+        net.forward(outputs, outputNames);
+
+        // Process the outputs
+        // for (size_t i = 0; i < outputs.size(); ++i) {
+        //     std::cout << "Output " << i << ": " << outputs[i].size << std::endl;
+        //     // Further processing of outputs[i] as required
+        // }
         // cv::Mat newmat(3, sz, output.type(), output.ptr<float>(0));
 
         // detections = getBoxes(newmat);
