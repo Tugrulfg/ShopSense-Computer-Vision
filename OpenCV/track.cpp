@@ -9,6 +9,7 @@
 #include <fstream>
 #include <dirent.h>
 #include <string>
+#include <chrono>
 #include <filesystem>
 #include<tuple>
 #include <array>
@@ -16,74 +17,94 @@
 #include <cmath>
 #include "Tracker.hpp"
 
-std::vector<std::pair<cv::Rect2f, int>> getBoxes(const cv::Mat& label_matrix, size_t grid);
+void getBoxes(const cv::Mat& label_matrix, size_t grid, std::vector<std::pair<cv::Rect2f, int>>& detections);
 
 float sigmoid(float in);
 
 const std::array<const char*, 10> CLASSES = {"apple", "centro", "chips", "drain_opener", "ketchup", "pasta", "potato", "probis", "semolina", "tea"};
-const size_t IMAGE_SIZE = 640;
-const std::array<size_t, 3> GRIDS = {80, 40, 20};
+const size_t IMAGE_SIZE = 224;
+const size_t GRID_SIZE = 7;
 const size_t NUM_BOXES = 2;
 const size_t NUM_CLASSES = 10;
 const float OBJ_THRESHOLD = 0.45;        // Ignore the detections with confidence less than threshold
-const float NMS_THRESHOLD = 0.45;        // Ignore the detections with IOU more than threshold
+const float NMS_THRESHOLD = 0.05;        // Ignore the detections with IOU more than threshold
 
 std::vector<std::string> getFiles(const std::string& path);
 
 int main(){
     std::cout << "OpenCV version: " << CV_VERSION << std::endl;
-    Tracker tracker;
-    cv::dnn::Net net = cv::dnn::readNet("../Models/yolov8sop10.onnx");
+    std::vector<std::pair<int, int>> results;
+    MyTracker tracker;
+    cv::dnn::Net net = cv::dnn::readNetFromONNX("../Models/YOLOTiny_LargeNOOBJ/yolo_tiny_op11.onnx");
     std::vector<std::pair<cv::Rect2f, int>> detections;
-    int sz[] = {7, 7, 20}; 
+    int sz[3]= {7, 7, 20}; 
 
 
     cv::Mat frame, input, output;
 
-    cv::VideoCapture cap(0);
-    int start, end;
-    // std::vector<std::string> test_images = getFiles("../TestImages/");
-    // for(const std::string& path: test_images){
+    cv::VideoCapture cap("../TestVideo/20240528_164634.mp4");
+    // cv::VideoCapture cap(0);
+    std::vector<std::string> test_images = getFiles("../TestImages/");
+    std::cout << test_images.size() << std::endl;
+    //for(const std::string& path: test_images){
     while(1){
-        start = cv::getTickCount();
+        cv::TickMeter tm;
+        tm.start();
         cap >> frame;
+
+        if (frame.empty()) {
+            std::cerr << "Error: Unable to read a frame from the video." << std::endl;
+            break;
+        }
         // frame = cv::imread(path);
         cv::resize(frame, frame, cv::Size(IMAGE_SIZE, IMAGE_SIZE));
-        input = cv::dnn::blobFromImage(frame, 1.0 / 255.0, cv::Size(IMAGE_SIZE, IMAGE_SIZE), cv::Scalar(0, 0, 0), true, false);
+        cv::dnn::blobFromImage(frame, input, 1.0/255.0, cv::Size(224, 224), cv::Scalar(), true, false);
         net.setInput(input);
-        std::vector<std::string> outputNames = net.getUnconnectedOutLayersNames();
+        //std::vector<std::string> outputNames = net.getUnconnectedOutLayersNames();
 
         // Create a vector to store the outputs
-        std::vector<cv::Mat> outputs;
+        // std::vector<cv::Mat> outputs;
 
         // Run the forward pass and retrieve the outputs
-        net.forward(outputs, outputNames);
-
-        // Process the outputs
+        output = net.forward();
+        cv::Mat newmat(3, sz, output.type(), output.ptr<float>(0));
+        
+        getBoxes(newmat, 7, detections);
+        //Process the outputs
         // for (size_t i = 0; i < outputs.size(); ++i) {
-        //     std::cout << "Output " << i << ": " << outputs[i].size << std::endl;
-        //     // Further processing of outputs[i] as required
+        //     std::cout << outputs[i].size << std::endl;
+        //     cv::Mat newmat(3, sz[i], outputs[i].type(), outputs[i].ptr<float>(0));
+        //     getBoxes(newmat, GRIDS[i], detections);
         // }
-        // cv::Mat newmat(3, sz, output.type(), output.ptr<float>(0));
+        
 
-        // detections = getBoxes(newmat);
-
-        // tracker.update(detections);
-        // tracker.draw(frame);
+        results = tracker.update(detections);
+        for(const std::pair<int, int>& result : results){
+            if(result.first == 0)
+                std::cout << "BOTTOM: " << CLASSES[result.second] << std::endl;
+            else
+                std::cout << "TOP: " << CLASSES[result.second] << std::endl;
+        }
+        tracker.draw(frame);
 
         // for(const std::pair<cv::Rect2f, int>& detection: detections){
-        //     std::cout << detection.first << std::endl;
         //     cv::putText(frame, CLASSES[detection.second], detection.first.tl(), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 0), 2);
+        //     cv::rectangle(frame, detection.first, cv::Scalar(0, 255, 255), 2);
         // }
-        end = cv::getTickCount();
-        double fps = cv::getTickFrequency() / (end - start);
-        std::cout << fps << std::endl;
+        // double fps = cv::getTickFrequency() / (end - start);
+        // std::cout << fps << std::endl;
         // cv::putText(frame, std::to_string(fps), cv::Point(10, 30), cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0, 255, 0), 2);
-        // cv::imshow("frame", frame);
+        tm.stop();
+        double inferenceTime = tm.getTimeMilli(); // In milliseconds
+        double fps = 1000.0 / inferenceTime;
+        cv::putText(frame, std::to_string(fps), cv::Point(10, 30), cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0, 255, 0), 2);
+        cv::imshow("frame", frame);
         if(cv::waitKey(1) == 'q')
             break;
 
+        
         detections.clear();
+        results.clear();
     }
 
     cap.release();
@@ -92,7 +113,7 @@ int main(){
     return 0;
 }
 
-std::vector<std::pair<cv::Rect2f, int>> getBoxes(const cv::Mat& label_matrix, size_t grid) {
+void getBoxes(const cv::Mat& label_matrix, size_t grid, std::vector<std::pair<cv::Rect2f, int>>& detections) {
     std::vector<int> classIds;
     std::vector<float> confidences;
     std::vector<cv::Rect> boxes;
@@ -110,15 +131,15 @@ std::vector<std::pair<cv::Rect2f, int>> getBoxes(const cv::Mat& label_matrix, si
                     int top = centerY - height / 2;
 
                     int maxIndex = 0;
-                    float maxValue = label_matrix.at<float>(0, 0, 0); // Initialize maxValue with the first element
-                    for (int i = 1; i < 10; ++i) {
-                        float currentValue = label_matrix.at<float>(0, 0, i);
+                    float maxValue = label_matrix.at<float>(i, j, 0); // Initialize maxValue with the first element
+                    for (int k = 1; k < 10; ++k) {
+                        float currentValue = label_matrix.at<float>(i, j, k);
                         if (currentValue > maxValue) {
                             maxValue = currentValue;
-                            maxIndex = i;
+                            maxIndex = k;
                         }
                     }
-                    classIds.push_back(label_matrix.at<float>(i, j, maxIndex));
+                    classIds.push_back(maxIndex);
                     confidences.push_back(confidence);
                     boxes.push_back(cv::Rect(left, top, width, height));
                 }  
@@ -135,33 +156,29 @@ std::vector<std::pair<cv::Rect2f, int>> getBoxes(const cv::Mat& label_matrix, si
                     int top = centerY - height / 2;
 
                     int maxIndex = 0;
-                    float maxValue = label_matrix.at<float>(0, 0, 0); // Initialize maxValue with the first element
-                    for (int i = 1; i < 10; ++i) {
-                        float currentValue = label_matrix.at<float>(0, 0, i);
+                    float maxValue = label_matrix.at<float>(i, j, 0); // Initialize maxValue with the first element
+                    for (int k = 1; k < 10; ++k) {
+                        float currentValue = label_matrix.at<float>(i, j, k);
                         if (currentValue > maxValue) {
                             maxValue = currentValue;
-                            maxIndex = i;
+                            maxIndex = k;
                         }
                     }
-                    classIds.push_back(label_matrix.at<float>(i, j, maxIndex));
+                    classIds.push_back(maxIndex);
                     confidences.push_back(confidence);
                     boxes.push_back(cv::Rect(left, top, width, height));
                 }  
             }
-             
         }
     }
 
-    std::vector<std::pair<cv::Rect2f, int>> result;
     std::vector<int> indices;
     cv::dnn::NMSBoxes(boxes, confidences, OBJ_THRESHOLD, NMS_THRESHOLD, indices);
 
     for (size_t i = 0; i < indices.size(); ++i) {
         int idx = indices[i];
-        result.push_back({boxes[idx], classIds[idx]});
+        detections.push_back({boxes[idx], classIds[idx]});
     }
-
-    return result;
 }
 
 float sigmoid(float in) {

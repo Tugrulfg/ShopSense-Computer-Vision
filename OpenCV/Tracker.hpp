@@ -34,10 +34,10 @@ class KalmanFilter {
         int time_since_update;
 };
 
-class Tracker {
+class MyTracker {
     public:
-        Tracker();
-        ~Tracker();
+        MyTracker();
+        ~MyTracker();
         std::vector<std::pair<int, int>> update(const std::vector<std::pair<cv::Rect2f, int>>& detections);
         std::vector<std::pair<cv::Rect2f, int>> get_tracks() const;
         std::vector<std::pair<cv::Rect2f, int>> get_predictions() const;
@@ -46,7 +46,7 @@ class Tracker {
     private:
         std::vector<KalmanFilter> trackers;
         int max_age = 10; // Maximum number of frames to keep a tracker without updates
-        int min_hits = 3; // Minimum number of hits to consider a tracker "confirmed"
+        int min_hits = 5; // Minimum number of hits to consider a tracker "confirmed"
 
         double iou(const cv::Rect2f& bbox1, const cv::Rect2f& bbox2)const;
 };

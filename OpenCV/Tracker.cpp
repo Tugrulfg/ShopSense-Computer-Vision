@@ -81,7 +81,7 @@ void KalmanFilter::increment_time_since_update() {
 void KalmanFilter::update_class(int new_class_id){
     // Add new class_id to history
     classes.push_back(new_class_id);
-    if (classes.size() > 10) {
+    if (classes.size() > 30) {
         classes.pop_front();
     }
 
@@ -115,21 +115,21 @@ int KalmanFilter::exit_dir()const{
 }
 
 
-Tracker::Tracker(){
+MyTracker::MyTracker(){
 
 }
 
-Tracker::~Tracker(){
+MyTracker::~MyTracker(){
 
 }
 
-double Tracker::iou(const cv::Rect2f& bbox1, const cv::Rect2f& bbox2) const{
+double MyTracker::iou(const cv::Rect2f& bbox1, const cv::Rect2f& bbox2) const{
     float intersection = std::max(0.0f, std::min(bbox1.x + bbox1.width, bbox2.x + bbox2.width) - std::max(bbox1.x, bbox2.x)) * std::max(0.0f, std::min(bbox1.y + bbox1.height, bbox2.y + bbox2.height) - std::max(bbox1.y, bbox2.y));
 
     return intersection / (bbox1.width * bbox1.height + bbox2.width * bbox2.height - intersection + 1e-7);
 }
 
-std::vector<std::pair<int, int>> Tracker::update(const std::vector<std::pair<cv::Rect2f, int>>& detections) {
+std::vector<std::pair<int, int>> MyTracker::update(const std::vector<std::pair<cv::Rect2f, int>>& detections) {
     // Predict new locations for all trackers
     for (auto& tracker : trackers) {
         tracker.predict();
@@ -192,7 +192,7 @@ std::vector<std::pair<int, int>> Tracker::update(const std::vector<std::pair<cv:
     return results;
 }
 
-std::vector<std::pair<cv::Rect2f, int>> Tracker::get_tracks() const {
+std::vector<std::pair<cv::Rect2f, int>> MyTracker::get_tracks() const {
     std::vector<std::pair<cv::Rect2f, int>> tracks;
     for(const auto& tracker : trackers){
         if (tracker.get_hits() >= min_hits)  // Only return confirmed tracks
@@ -201,7 +201,7 @@ std::vector<std::pair<cv::Rect2f, int>> Tracker::get_tracks() const {
     return tracks;
 }
 
-std::vector<std::pair<cv::Rect2f, int>> Tracker::get_predictions() const {
+std::vector<std::pair<cv::Rect2f, int>> MyTracker::get_predictions() const {
     std::vector<std::pair<cv::Rect2f, int>> predictions;
     for(const auto& tracker : trackers){
         if(tracker.get_hits() >= min_hits)  // Only return confirmed tracks
@@ -210,7 +210,7 @@ std::vector<std::pair<cv::Rect2f, int>> Tracker::get_predictions() const {
     return predictions;
 }
 
-void Tracker::draw(cv::Mat& frame)const{
+void MyTracker::draw(cv::Mat& frame)const{
     for(const std::pair<cv::Rect2f, int>& prediction : get_predictions()){
         cv::rectangle(frame, prediction.first, cv::Scalar(0, 255, 255), 2); // Different color for predictions
         cv::putText(frame, std::to_string(prediction.second), prediction.first.tl(), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 0), 2);
