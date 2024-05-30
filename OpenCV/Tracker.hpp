@@ -56,6 +56,7 @@ class KalmanFilter {
         int enter_dir;
 };
 
+// Class encapsulating the detection model and tracking algorithm
 class MyTracker {
     public:
         MyTracker(const std::string model_path, const float nms_thres, const float obj_thres);
@@ -98,6 +99,7 @@ class MyTracker {
         static float sigmoid(float in);
 };
 
+// Algorithm to match detections from the model to the tracked objects
 class HungarianAlgorithm {
     public:
         HungarianAlgorithm(const std::vector<std::vector<double>>& cost_matrix);
