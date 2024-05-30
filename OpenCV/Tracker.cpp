@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <limits>
 
+// Class for storing tracked object state
 KalmanFilter::KalmanFilter(const cv::Rect2f& init_bbox, int class_id):age(0), hits(0), time_since_update(0) {
     // Initialize Kalman filter parameters
     kf = cv::KalmanFilter(7, 4, 0);
@@ -44,6 +45,7 @@ KalmanFilter::KalmanFilter(const cv::Rect2f& init_bbox, int class_id):age(0), hi
     classes.push_back(class_id);
 }
 
+// Predicts the next state of the object based on the current state
 void KalmanFilter::predict() {
     state = kf.predict();
 
@@ -51,6 +53,7 @@ void KalmanFilter::predict() {
     time_since_update++;
 }
 
+// Updates the state of the object based on the measurement
 void KalmanFilter::update(const cv::Rect2f& bbox, int class_id) {
     meas.at<float>(0) = bbox.x + bbox.width / 2;
     meas.at<float>(1) = bbox.y + bbox.height / 2;
@@ -64,6 +67,7 @@ void KalmanFilter::update(const cv::Rect2f& bbox, int class_id) {
     time_since_update = 0;
 }
 
+// Returns the current location of the object
 cv::Rect2f KalmanFilter::get_bbox() const {
     float cx = state.at<float>(0);
     float cy = state.at<float>(1);
@@ -72,18 +76,22 @@ cv::Rect2f KalmanFilter::get_bbox() const {
     return cv::Rect2f(state.at<float>(0) - state.at<float>(2) / 2, state.at<float>(1) - state.at<float>(3) / 2, state.at<float>(2), state.at<float>(3));
 }
 
+// Returns the class of the object
 int KalmanFilter::get_class_id() const {
     return class_id;
 }
 
+// Returns the time since the object was last updated
 int KalmanFilter::get_time_since_update() const {
     return time_since_update;
 }
 
+// Increments the time since the object was last updated
 void KalmanFilter::increment_time_since_update() {
     time_since_update++;
 }
 
+// Updates the class of the object
 void KalmanFilter::update_class(int new_class_id){
     // Add new class_id to history
     classes.push_back(new_class_id);
@@ -109,11 +117,12 @@ void KalmanFilter::update_class(int new_class_id){
     class_id = most_frequent_id;
 }
 
+// Returns the number of times the object has been tracked
 int KalmanFilter::get_hits() const {
     return hits;
 }
 
-// 0-->Bottom, 1-->Top
+// Returns the exit direction of the object: 0-->Bottom, 1-->Top
 int KalmanFilter::exit_dir()const{
     int exit_dir = 0;
     if(state.at<float>(1)-state.at<float>(3)/2 <= 112.0)
@@ -125,21 +134,19 @@ int KalmanFilter::exit_dir()const{
 }
 
 
-MyTracker::MyTracker(){
-
+MyTracker::MyTracker(const std::string model_path, const float nms_thres, const float obj_thres): NMS_THRESHOLD(nms_thres), OBJ_THRESHOLD(obj_thres){
+    model = cv::dnn::readNetFromONNX(model_path);
 }
 
 MyTracker::~MyTracker(){
 
 }
 
-double MyTracker::iou(const cv::Rect2f& bbox1, const cv::Rect2f& bbox2) const{
-    float intersection = std::max(0.0f, std::min(bbox1.x + bbox1.width, bbox2.x + bbox2.width) - std::max(bbox1.x, bbox2.x)) * std::max(0.0f, std::min(bbox1.y + bbox1.height, bbox2.y + bbox2.height) - std::max(bbox1.y, bbox2.y));
+// Takes the input frame and updates the tracked objects
+std::vector<std::pair<int, int>> MyTracker::update(const cv::Mat& frame) {
 
-    return intersection / (bbox1.width * bbox1.height + bbox2.width * bbox2.height - intersection + 1e-7);
-}
-
-std::vector<std::pair<int, int>> MyTracker::update(const std::vector<std::pair<cv::Rect2f, int>>& detections) {
+    std::vector<std::pair<cv::Rect2f, int>> detections = detect(frame);
+    
     // Predict new locations for all trackers
     for (auto& tracker : trackers) {
         tracker.predict();
@@ -202,15 +209,15 @@ std::vector<std::pair<int, int>> MyTracker::update(const std::vector<std::pair<c
     return results;
 }
 
-std::vector<std::pair<cv::Rect2f, int>> MyTracker::get_tracks() const {
-    std::vector<std::pair<cv::Rect2f, int>> tracks;
-    for(const auto& tracker : trackers){
-        if (tracker.get_hits() >= min_hits)  // Only return confirmed tracks
-            tracks.emplace_back(tracker.get_bbox(), tracker.get_class_id());
+// Draws the detections to the frame
+void MyTracker::draw(cv::Mat& frame)const{
+    for(const std::pair<cv::Rect2f, int>& prediction : get_predictions()){
+        cv::rectangle(frame, prediction.first, cv::Scalar(0, 255, 255), 2); // Different color for predictions
+        cv::putText(frame, std::to_string(prediction.second), prediction.first.tl(), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 0), 2);
     }
-    return tracks;
 }
 
+// Returns the predicted locations of the objects
 std::vector<std::pair<cv::Rect2f, int>> MyTracker::get_predictions() const {
     std::vector<std::pair<cv::Rect2f, int>> predictions;
     for(const auto& tracker : trackers){
@@ -220,13 +227,123 @@ std::vector<std::pair<cv::Rect2f, int>> MyTracker::get_predictions() const {
     return predictions;
 }
 
-void MyTracker::draw(cv::Mat& frame)const{
-    for(const std::pair<cv::Rect2f, int>& prediction : get_predictions()){
-        cv::rectangle(frame, prediction.first, cv::Scalar(0, 255, 255), 2); // Different color for predictions
-        cv::putText(frame, std::to_string(prediction.second), prediction.first.tl(), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 0), 2);
+// Takes the input frame and updates the tracked objects
+std::vector<std::pair<cv::Rect2f, int>> MyTracker::detect(const cv::Mat& frame){
+    cv::Mat input, output;
+    std::vector<std::pair<cv::Rect2f, int>> detections;
+    cv::dnn::blobFromImage(frame, input, 1.0/255.0, cv::Size(224., 224.), cv::Scalar(), true, false);
+    model.setInput(input);
+
+    output = model.forward();
+    cv::Mat newmat(3, sz, output.type(), output.ptr<float>(0));
+        
+    getBoxes(newmat, detections);
+    return detections;
+}
+
+// Applies non maximum suppression to filter out unnecessary detections
+void MyTracker::NMS(const std::vector<cv::Rect2f>& boxes, const std::vector<float>& scores, const std::vector<int>& classIds, std::vector<int>& indices) const{
+    std::vector<int> order(boxes.size());
+    std::iota(order.begin(), order.end(), 0);
+    std::sort(order.begin(), order.end(), [&scores](int a, int b) { return scores[a] > scores[b]; });
+
+    std::vector<bool> suppressed(boxes.size(), false);
+
+    for (size_t i = 0; i < order.size(); ++i) {
+        int idx = order[i];
+        if (suppressed[idx]) continue;
+        indices.push_back(idx);
+
+        for (size_t j = i + 1; j < order.size(); ++j) {
+            int nextIdx = order[j];
+            if (classIds[idx] != classIds[nextIdx]) continue; // Skip different classes
+            if (iou(boxes[idx], boxes[nextIdx]) > NMS_THRESHOLD) {
+                suppressed[nextIdx] = true;
+            }
+        }
     }
 }
 
+// Processes the outputs of the model to get the object locations and the classes
+void MyTracker::getBoxes(const cv::Mat& label_matrix, std::vector<std::pair<cv::Rect2f, int>>& detections) const{
+    std::vector<int> classIds;
+    std::vector<float> confidences;
+    std::vector<cv::Rect2f> boxes;
+    for (int i = 0; i < 7; ++i) {
+        for(int j=0; j<7; j++){
+            if(label_matrix.at<float>(i, j, 10) > label_matrix.at<float>(i, j, 15)){
+                float confidence = label_matrix.at<float>(i, j, 10);
+                confidence = sigmoid(confidence);
+                if (confidence > OBJ_THRESHOLD) {
+                    int centerX = static_cast<int>((label_matrix.at<float>(i, j, 11) + j) * (224./7));
+                    int centerY = static_cast<int>((label_matrix.at<float>(i, j, 12) + i) * (224./7));
+                    int width = static_cast<int>(label_matrix.at<float>(i, j, 13) * 224.);
+                    int height = static_cast<int>(label_matrix.at<float>(i, j, 14) * 224.);
+                    int left = centerX - width / 2;
+                    int top = centerY - height / 2;
+
+                    int maxIndex = 0;
+                    float maxValue = label_matrix.at<float>(i, j, 0); // Initialize maxValue with the first element
+                    for (int k = 1; k < 10; ++k) {
+                        float currentValue = label_matrix.at<float>(i, j, k);
+                        if (currentValue > maxValue) {
+                            maxValue = currentValue;
+                            maxIndex = k;
+                        }
+                    }
+                    classIds.push_back(maxIndex);
+                    confidences.push_back(confidence);
+                    boxes.push_back(cv::Rect(left, top, width, height));
+                }  
+            }
+            else{
+                float confidence = label_matrix.at<float>(i, j, 15);
+                confidence = sigmoid(confidence);
+                if (confidence > OBJ_THRESHOLD) {
+                    int centerX = static_cast<int>((label_matrix.at<float>(i, j, 16) + j) * (224./7));
+                    int centerY = static_cast<int>((label_matrix.at<float>(i, j, 17) + i) * (224./7));
+                    int width = static_cast<int>(label_matrix.at<float>(i, j, 18) * 224.);
+                    int height = static_cast<int>(label_matrix.at<float>(i, j, 19) * 224.);
+                    int left = centerX - width / 2;
+                    int top = centerY - height / 2;
+
+                    int maxIndex = 0;
+                    float maxValue = label_matrix.at<float>(i, j, 0); // Initialize maxValue with the first element
+                    for (int k = 1; k < 10; ++k) {
+                        float currentValue = label_matrix.at<float>(i, j, k);
+                        if (currentValue > maxValue) {
+                            maxValue = currentValue;
+                            maxIndex = k;
+                        }
+                    }
+                    classIds.push_back(maxIndex);
+                    confidences.push_back(confidence);
+                    boxes.push_back(cv::Rect(left, top, width, height));
+                }  
+            }
+        }
+    }
+
+    std::vector<int> indices;
+    NMS(boxes, confidences, classIds, indices);
+
+    for (size_t i = 0; i < indices.size(); ++i) {
+        int idx = indices[i];
+        detections.push_back({boxes[idx], classIds[idx]});
+    }
+}
+
+// Calculates the Intersection Over Union value between two bounding boxes
+double MyTracker::iou(const cv::Rect2f& bbox1, const cv::Rect2f& bbox2){
+    float intersection = std::max(0.0f, std::min(bbox1.x + bbox1.width, bbox2.x + bbox2.width) - std::max(bbox1.x, bbox2.x)) * std::max(0.0f, std::min(bbox1.y + bbox1.height, bbox2.y + bbox2.height) - std::max(bbox1.y, bbox2.y));
+
+    return intersection / (bbox1.width * bbox1.height + bbox2.width * bbox2.height - intersection + 1e-7);
+}
+
+// Sigmoid function to scale values between 0 and 1
+float MyTracker::sigmoid(float in) {
+    return 1.0 / (1.0 + std::exp(-in));
+}
 
 
 HungarianAlgorithm::HungarianAlgorithm(const std::vector<std::vector<double>>& cost_matrix)
