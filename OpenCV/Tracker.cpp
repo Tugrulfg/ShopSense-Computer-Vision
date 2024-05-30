@@ -33,6 +33,12 @@ KalmanFilter::KalmanFilter(const cv::Rect2f& init_bbox, int class_id):age(0), hi
     state.at<float>(2) = init_bbox.width;
     state.at<float>(3) = init_bbox.height;
 
+    // Keep the enterance direction of the object
+    if(state.at<float>(1)-state.at<float>(3)/2 <= 112.0)       // From Top
+        enter_dir = 1;
+    else                                // From Bottom
+        enter_dir = 0;  
+
     kf.statePost = state;
 
     classes.push_back(class_id);
@@ -109,9 +115,13 @@ int KalmanFilter::get_hits() const {
 
 // 0-->Bottom, 1-->Top
 int KalmanFilter::exit_dir()const{
+    int exit_dir = 0;
     if(state.at<float>(1)-state.at<float>(3)/2 <= 112.0)
-        return 1;
-    return 0;
+        exit_dir = 1;
+    
+    if(exit_dir == enter_dir)
+        return -1;
+    return exit_dir;
 }
 
 

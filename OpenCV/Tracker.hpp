@@ -32,6 +32,7 @@ class KalmanFilter {
         int age;
         int hits;
         int time_since_update;
+        int enter_dir;
 };
 
 class MyTracker {
