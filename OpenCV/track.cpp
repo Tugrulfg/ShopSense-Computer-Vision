@@ -16,7 +16,7 @@
 #include "Tracker.hpp"
 
 const std::array<const char*, 10> CLASSES = {"apple", "centro", "chips", "drain_opener", "ketchup", "pasta", "potato", "probis", "semolina", "tea"};
-const float OBJ_THRESHOLD = 0.45;        // Ignore the detections with confidence less than threshold
+const float OBJ_THRESHOLD = 0.35;        // Ignore the detections with confidence less than threshold
 const float NMS_THRESHOLD = 0.05;        // Ignore the detections with IOU more than threshold
 
 int main(){
@@ -24,7 +24,7 @@ int main(){
     std::vector<std::pair<int, int>> results;
 
     // Initialize the tracker
-    MyTracker tracker("../Models/final_model_op10.onnx", NMS_THRESHOLD, OBJ_THRESHOLD);
+    MyTracker tracker("../Models/final_model_op.onnx", NMS_THRESHOLD, OBJ_THRESHOLD);
     cv::Mat frame;
 
     cv::VideoCapture cap(0);
