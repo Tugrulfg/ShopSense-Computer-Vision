@@ -16,20 +16,18 @@
 #include "Tracker.hpp"
 
 const std::array<const char*, 10> CLASSES = {"apple", "centro", "chips", "drain_opener", "ketchup", "pasta", "potato", "probis", "semolina", "tea"};
-const float OBJ_THRESHOLD = 0.55;        // Ignore the detections with confidence less than threshold
-const float NMS_THRESHOLD = 0.45;        // Ignore the detections with IOU more than threshold
+const float OBJ_THRESHOLD = 0.45;        // Ignore the detections with confidence less than threshold
+const float NMS_THRESHOLD = 0.05;        // Ignore the detections with IOU more than threshold
 
 int main(){
     std::cout << "OpenCV version: " << CV_VERSION << std::endl;
     std::vector<std::pair<int, int>> results;
-    MyTracker tracker("../Models/yolo_tiny_op10.onnx", NMS_THRESHOLD, OBJ_THRESHOLD);
-    std::vector<std::pair<cv::Rect2f, int>> detections;
-    int sz[3]= {7, 7, 20}; 
 
-    cv::Mat frame, input, output;
+    // Initialize the tracker
+    MyTracker tracker("../Models/final_model_op10.onnx", NMS_THRESHOLD, OBJ_THRESHOLD);
+    cv::Mat frame;
 
-    cv::VideoCapture cap("../TestVideo/20240528_164634.mp4");
-    // cv::VideoCapture cap(0);
+    cv::VideoCapture cap(0);
     while(1){
         cv::TickMeter tm;
         tm.start();
@@ -55,11 +53,10 @@ int main(){
         double fps = 1000.0 / inferenceTime;
         cv::putText(frame, std::to_string(fps), cv::Point(10, 30), cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0, 255, 0), 2);
         cv::imshow("frame", frame);
+
         if(cv::waitKey(1) == 'q')
             break;
 
-        
-        detections.clear();
         results.clear();
     }
 

@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <limits>
 
-// Class for storing tracked object state
+// Class for storing tracked objects
 KalmanFilter::KalmanFilter(const cv::Rect2f& init_bbox, int class_id):age(0), hits(0), time_since_update(0) {
     // Initialize Kalman filter parameters
     kf = cv::KalmanFilter(7, 4, 0);

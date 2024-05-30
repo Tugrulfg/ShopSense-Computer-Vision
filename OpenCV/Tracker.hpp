@@ -71,7 +71,7 @@ class MyTracker {
         cv::dnn::Net model;
         std::vector<KalmanFilter> trackers;
         int max_age = 10; // Maximum number of frames to keep a tracker without updates
-        int min_hits = 5; // Minimum number of hits to consider a tracker "confirmed"
+        int min_hits = 2; // Minimum number of hits to consider a tracker "confirmed"
 
         const int sz[3]= {7, 7, 20}; 
 
