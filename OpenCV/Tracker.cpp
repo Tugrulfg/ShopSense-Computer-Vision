@@ -124,13 +124,10 @@ int KalmanFilter::get_hits() const {
 
 // Returns the exit direction of the object: 0-->Bottom, 1-->Top
 int KalmanFilter::exit_dir()const{
-    int exit_dir = 0;
-    if(state.at<float>(1)-state.at<float>(3)/2 <= 112.0)
-        exit_dir = 1;
-    
-    if(exit_dir == enter_dir)
+    float vy = state.at<float>(5); // Velocity in y direction
+    if(enter_dir == 0 && vy > 0 || enter_dir == 1 && vy < 0) 
         return -1;
-    return exit_dir;
+    return (vy < 0) ? 1 : 0; // 1 for top exit, 0 for bottom exit
 }
 
 
