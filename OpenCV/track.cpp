@@ -14,10 +14,13 @@
 #include<tuple>
 #include <array>
 #include "omp.h"
+#include <numeric>
 #include <cmath>
 #include "Tracker.hpp"
 
-std::vector<std::pair<cv::Rect2f, int>> NMS(cv::Mat& labels);
+float intersectionOverUnion(const cv::Rect2f& boxA, const cv::Rect2f& boxB);
+
+void NMS(const std::vector<cv::Rect2f>& boxes, const std::vector<float>& scores, const std::vector<int>& classIds, std::vector<int>& indices);
 
 void getBoxes(const cv::Mat& label_matrix, size_t grid, std::vector<std::pair<cv::Rect2f, int>>& detections);
 
@@ -30,8 +33,6 @@ const size_t NUM_BOXES = 2;
 const size_t NUM_CLASSES = 10;
 const float OBJ_THRESHOLD = 0.55;        // Ignore the detections with confidence less than threshold
 const float NMS_THRESHOLD = 0.45;        // Ignore the detections with IOU more than threshold
-
-std::vector<std::string> getFiles(const std::string& path);
 
 int main(){
     std::cout << "OpenCV version: " << CV_VERSION << std::endl;
@@ -118,7 +119,7 @@ int main(){
 void getBoxes(const cv::Mat& label_matrix, size_t grid, std::vector<std::pair<cv::Rect2f, int>>& detections) {
     std::vector<int> classIds;
     std::vector<float> confidences;
-    std::vector<cv::Rect> boxes;
+    std::vector<cv::Rect2f> boxes;
     for (int i = 0; i < 7; ++i) {
         for(int j=0; j<7; j++){
             if(label_matrix.at<float>(i, j, 10) > label_matrix.at<float>(i, j, 15)){
@@ -175,7 +176,7 @@ void getBoxes(const cv::Mat& label_matrix, size_t grid, std::vector<std::pair<cv
     }
 
     std::vector<int> indices;
-    cv::dnn::NMSBoxes(boxes, confidences, OBJ_THRESHOLD, NMS_THRESHOLD, indices);
+    NMS(boxes, confidences, classIds, indices);
 
     for (size_t i = 0; i < indices.size(); ++i) {
         int idx = indices[i];
@@ -187,53 +188,36 @@ float sigmoid(float in) {
     return 1.0 / (1.0 + std::exp(-in));
 }
 
-std::vector<std::string> getFiles(const std::string& path){
-    std::vector<std::string> filenames;
-    for (const auto& entry : std::filesystem::directory_iterator(path)) {
-        if (entry.is_regular_file()) {
-            std::string fileName = entry.path().filename().string();
-            filenames.push_back(path + fileName);
-        }
-    }
-    return filenames;
+float intersectionOverUnion(const cv::Rect2f& boxA, const cv::Rect2f& boxB) {
+    float xA = std::max(boxA.x, boxB.x);
+    float yA = std::max(boxA.y, boxB.y);
+    float xB = std::min(boxA.x + boxA.width, boxB.x + boxB.width);
+    float yB = std::min(boxA.y + boxA.height, boxB.y + boxB.height);
+
+    float interArea = std::max(0.0f, xB - xA) * std::max(0.0f, yB - yA);
+
+    float iou = interArea / (boxA.width * boxA.height + boxB.width * boxB.height - interArea + 1e-7);
+    return iou;
 }
 
-std::vector<std::pair<cv::Rect2f, int>> NMS(cv::Mat& labels){
-    torch::Tensor order = torch::argsort(labels.slice(/*dim=*/-1, /*start=*/1, /*end=*/2), /*dim=*/0, /*descending=*/true);
-    std::vector<torch::Tensor> ordered_boxes;
-    std::vector<std::pair<cv::Rect2f, int>> final_boxes;
-    torch::Tensor chosen_box;
+void NMS(const std::vector<cv::Rect2f>& boxes, const std::vector<float>& scores, const std::vector<int>& classIds, std::vector<int>& indices) {
+    std::vector<int> order(boxes.size());
+    std::iota(order.begin(), order.end(), 0);
+    std::sort(order.begin(), order.end(), [&scores](int a, int b) { return scores[a] > scores[b]; });
 
-    for(size_t i=0; i<order.sizes()[0]; i++){
-        ordered_boxes.push_back(labels[order[i].item<int>()]);
-    }
+    std::vector<bool> suppressed(boxes.size(), false);
 
-    while(ordered_boxes.size() > 0){
-        chosen_box = ordered_boxes[0];
-        final_boxes.push_back({cv::Rect2f(chosen_box[2].item<float>(), chosen_box[3].item<float>(), chosen_box[4].item<float>(), chosen_box[5].item<float>()), chosen_box[0].item<int>()});
-        ordered_boxes.erase(ordered_boxes.begin());
-        for(size_t i=0; i<ordered_boxes.size(); i++){
-            if(torch::equal(chosen_box[0], ordered_boxes[i][0]) && torch::gt(intersection_over_union(chosen_box.slice(/*dim=*/-1, /*start=*/2, /*end=*/6), ordered_boxes[i].slice(/*dim=*/-1, /*start=*/2, /*end=*/6)), torch::tensor(NMS_THRESHOLD)).item<bool>()){
-                ordered_boxes.erase(ordered_boxes.begin() + i);
-                i--;
+    for (size_t i = 0; i < order.size(); ++i) {
+        int idx = order[i];
+        if (suppressed[idx]) continue;
+        indices.push_back(idx);
+
+        for (size_t j = i + 1; j < order.size(); ++j) {
+            int nextIdx = order[j];
+            if (classIds[idx] != classIds[nextIdx]) continue; // Skip different classes
+            if (intersectionOverUnion(boxes[idx], boxes[nextIdx]) > NMS_THRESHOLD) {
+                suppressed[nextIdx] = true;
             }
         }
     }
-
-    return final_boxes;
-}
-
-torch::Tensor intersection_over_union(const torch::Tensor& boxes_preds, const torch::Tensor& boxes_labels){
-    torch::Tensor box1_x = boxes_preds.slice(/*dim=*/-1, /*start=*/0, /*end=*/1);
-    torch::Tensor box1_y = boxes_preds.slice(/*dim=*/-1, /*start=*/1, /*end=*/2);
-    torch::Tensor box1_w = boxes_preds.slice(/*dim=*/-1, /*start=*/2, /*end=*/3);
-    torch::Tensor box1_h = boxes_preds.slice(/*dim=*/-1, /*start=*/3, /*end=*/4);
-    torch::Tensor box2_x = boxes_labels.slice(/*dim=*/-1, /*start=*/0, /*end=*/1);
-    torch::Tensor box2_y = boxes_labels.slice(/*dim=*/-1, /*start=*/1, /*end=*/2);
-    torch::Tensor box2_w = boxes_labels.slice(/*dim=*/-1, /*start=*/2, /*end=*/3);
-    torch::Tensor box2_h = boxes_labels.slice(/*dim=*/-1, /*start=*/3, /*end=*/4);
-
-    torch::Tensor intersection = (torch::min(box1_x+box1_w, box2_x+box2_w) - torch::max(box1_x, box2_x)).clamp(0) * (torch::min(box1_y+box1_h, box2_y+box2_h - torch::max(box1_y, box2_y)).clamp(0));
-
-    return intersection / (torch::abs(box1_w * box1_h) + torch::abs(box2_w * box2_h) - intersection + 1e-7);
 }
